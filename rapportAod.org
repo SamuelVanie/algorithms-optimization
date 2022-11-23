@@ -1,0 +1,309 @@
+#+title: Rapport Aod
+#+author: Samuel Michaël Vanié
+#+date: 17th November 2022
+#+STARTUP: latexpreview
+
+
+* Introduction
+
+Ce rapport relate ma compréhension des notions que j'ai appris tout au long du cours d'Algorithmique et Optimisation Discrète.
+
+Pour commencer quelle était l'objectif que j'ai pu ressentir au travers de ce cours ?
+Pour moi l'objectif de ce cours était de me faire prendre conscience des mécanismes qui interviennent au niveau de la mémoire pendant l'exécution d'un programme mais aussi de me montrer certaines techniques permettant d'optimiser cette gestion des différents niveaux de mémoire.
+
+Pour résumer, l'ordinateur a une hiérarchie de mémoires. Les mémoires vont des plus rapides et moins capacitives, plus proche du processeur aux mémoires avec plus de capacité mais beaucoup moins rapides.
+
+Les mémoires ont une taille totale bien spécifique et une taille de ligne de cache qui représente l'unité de chargement des données. C'est à dire que pour charger les données en mémoire, l'ordinateur ne le fait par octet par octet ou bit par bit mais par taille de ligne de cache. Le passage d'un niveau du cache à un autre se fait aussi par ligne de cache.
+
+Pour continuer, lors de l'exécution d'un programme, plusieurs manipulation sont effectuées au niveau des différentes mémoires : des *lectures* et des *chargements*. Les données passent aussi d'un niveau à un autre en fonction de la taille.
+Lorsqu'un programme veut récupérer une donnée dans la mémoire il recherche dans le cache. Si la donnée se trouve dans le cache (*cache hit*), la donnée est chargé dans l'espace de travail et utilisé par le programme. Si la donnée est absente du cache (*cache miss* ou *défaut de cache*), la donnée ainsi que celles adjacentes sont chargées dans le cache dans l'espoir que celles-ci soient aussi accédées très prochainement.
+Concernant les défauts de cache, ils peuvent intervenir au début de l'exécution d'un code, ces défauts la sont inévitables et sont appelés les *défauts de cache obligatoires*.
+Lorsque le cache est plein alors qu'on doit y ajouter une nouvelle ligne, une ligne de cache déjà présente doit être remplacée. Pour effectuer cette opération plusieurs algorithmes existent. On appelle ces algorithmes les *politiques de remplacement*. Il en existe plusieurs tels que le *LRU* (*Last Recently Used*) que nous avons vu dans ce cours, le *FIFO* (First In First Out), le *LIFO* (Last In First Out) ou le *MRU* (*Most Recently Used*).
+
+
+* Localité
+
+
+Pour amortir le coup d'un programme et le rendre plus efficace, il faudrait diminuer le nombre de défauts de cache que celui-ci fait. Ainsi pour y parvenir, nous devons soit accéder aux données qui sont stockées de manière contigüe dans la mémoire (*localité spatiale*) ou faire en sorte que les accès à une même donnée se fassent simultanément ou pendant une période de temps qui est très rapprochée (*localité temporelle*).
+
+Dans la suite, j'utilise le LRU comme politique de remplacement ainsi que le modèle CO qui est un modèle théorique du cache utilisé pour faire les estimations sur le coup des opérations.
+
+
+Pour illustrer les concepts de localité, comparons ces deux algorithmes.
+
+/Premier algorithme/
+
+#+BEGIN_SRC C++
+int somme = 0;
+int somme_carres=0;
+for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+    somme += tab[i];
+}
+
+for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+    somme_carres += pow(tab[i], 2);
+}
+#+END_SRC
+
+/Deuxième algorithme/
+
+#+BEGIN_SRC C++
+int somme = 0;
+int somme_carres=0;
+for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+    somme += tab[i];
+    somme_carres += pow(tab[i], 2);
+}
+#+END_SRC
+
+Soit Z la taille du cache, L la taille d'une ligne de cache et n la taille du tableau.
+
+Si Z \gg n alors les deux codes générerons le même nombre de *défauts de cache obligatoire* qui est Q(n,L,Z) = $\lceil\frac{n}{L}\rceil$ \pm \Theta(1) en fonction de si le tableau est aligné avec le cache ou non. Car tous les éléments du tableau seront chargés dans le cache au niveau de la première boucle (calcul de la somme des éléments) et à l'exécution de la deuxième les éléments seront déjà présents.
+
+Par contre, si Z \ll n alors le premier algorithme fera le double en terme de défauts de cache; c'est-à-dire $2 \times \lceil\frac{n}{L}\rceil$ \pm \Theta(1).
+Le deuxième algorithme lui restera avec le même nombre de défauts de cache obligatoires.
+
+Le passage vers le deuxième algorithme relate l'éfficacité de l'utilisation de la localité. La localité spatiale est traduite par le fait que les éléments du tableau sont accédés de manière séquentielle, l'un à la suite de l'autre, ce qui fait qu'après avoir accédé à un élément, il y a une forte probabilité que le suivant soit déjà dans le cache soit parce qu'il y était déjà car dans la même ligne de cache que le précédent, soit parce qu'on l'a chargé en cache avec l'élément précédent.
+
+La localité temporelle est traduite par le fait qu'au lieu de faire le calcul de la somme des éléments puis ensuite de faire le calcul de la somme des carrés on fasse ces deux calculs de manière rapprochée dans simultanée ou rapprochée dans le temps. Après avoir accédé à l'élément à l'index i, on utilise pour calculer la somme mais on calcul en même temps son carré pour pouvoir calculer la somme des carrés.
+
+
+Ainsi la localité est un concept très important à prendre en compte lorsque l'on veut optimiser le code, les parties suivantes traiterons de stratégies plus avancées mais qui prennent en compte la localité.
+
+
+* Technique de blocking
+
+En quoi consiste le blocking ?
+
+Le *blocking* c'est, après avoir fait l'analyse des dépendances et identifié les données nécessaires pendant un calcul de les regrouper par blocs en vue d'assurer une localité spatiale.
+
+Lorsque le bloc est formé à partir de la taille du cache, c'est à dire que le code s'exécute en fonction de la taille de celui-ci et le considère comme un paramètre, on dit que le programme est *cache aware*.
+
+Lorsque le programme peut s'exécuter sans tenir compte de la taille du cache et faire les calculs, on parle de programme *cache oblivious*.
+
+La technique de blocking est très importante et peut être utilisé dans le traitement d'images où les images peuvent être découpées en plusieurs blocs tenant dans le cache en vue d'être traitées plus rapidement.
+
+** Programme utilisant le blocking (la multiplication de deux matrices)
+
+Une méthode naïve consiste à traduire directement la formule mathématique en code.
+
+Pseudo code :
+
+#+BEGIN_EXAMPLE
+for i:=1 to N do
+    for k:=1 to N do
+        for j:=1 to N do
+            P[i, j] += X[i, k] * Y[k, j]
+#+END_EXAMPLE
+
+Cet algorithme a une complexité de \Theta($N^3$). Le nombre de défauts de cache obligatoires qu'il fait est de :
+
+\begin{equation}
+Q(n,L,Z) = \left\{
+    \begin{array}{ll}
+        \frac{3n^2}{L} & \mbox{si les trois matrices tiennent en cache} \\
+        n^3 & \mbox{sinon}
+\end{equation}
+
+
+Une première optimisation serait de faire sortir la valeur X[i,k] de la boucle pour éviter que son calcul ne soit opérer à tour de boucle.
+L'algorithme devient donc :
+
+#+BEGIN_EXAMPLE
+for i:=1 to N do
+    for k:=1 to N do
+        z = X[i, k]
+        for j:=1 to N do
+            P[i, j] += z * Y[k, j]
+#+END_EXAMPLE
+
+Maintenant, analysons le graphe des dépendances dans ce calcul. On constate que pour calculer la valeur i,j de P, on a besoin de la ligne i de X et de la colonne j de Y.
+
+
+Ainsi, en suivant ces dépendances, nous allons parcourir les matrices lignes par lignes mais par blocs :
+
+
+Dans l'algorithme qui suit,
+
+#+BEGIN_EXAMPLE
+for kk := 1 to N by B do
+    for jj := 1 to N by B do
+        for i := 1 to N do
+            for k := kk to min(kk+B-1, N) do
+                z = X[i, k]
+                for j := jj to min(jj+B-1, N) do
+                    P[i, j] += z * Y[k, j]
+#+END_EXAMPLE
+
+On aura maintenant des défauts de cache chaque $\frac{3B^2}{L}$ accès dans la boucle interne. Les valeurs suivantes seront déjà dans le cache jusqu'à la prochaine itération. Donc le total de défauts de cache sera cette valeur multipliée par le nombre d'opérations dans la boucle qui est de $\frac{n^3}{B^3}$.
+
+Par conséquent Q(n,L,Z) = $\frac{n^3}{B^3} \times \frac{3B^2}{L}$ = \Theta($\frac{n^3}{L\sqrt{Z}}$).
+
+Le choix optimal de la taille des blocs est donc $\sqrt{Z}$.
+Cette méthode est une méthode *cache aware*.
+
+On peut faire passer cet algorithme à une méthode *cache oblivious* en faisant une découpe récursive des blocs pour que ceux-ci tiennent en cache, mais cela ne serait nécessaire que si nous avons des matrices de très grandes tailles pour que le coup de la découpe récursive soit négligeable devant le coup des défauts de cache que nous obtiendrons sans faire cette opérations.
+
+La découpe récursive permet d'obtenir le code suivant :
+# TODO Compléter ou supprimer la ligne d'en haut
+
+* Programmation dynamique, blocking et memoization
+
+*Qu'est-ce la programmation dynamique ?*
+
+La programmation dynamique est une méthode de résolution de problème algorithmique qui consiste à décomposer un problème en sous-problèmes qu'on pourra résoudre afin de retrouver la solution finale.
+
+*Qu'est-ce que la memoization?*
+
+La memoization est le fait de conserver une valeur qui sera nécessaire pour la suite des calculs dans un algorithme récursif.
+
+*** Programme utilisant la programmation dynamique et la memoization
+
+On considère un ensemble de n pièces alignées v1...vn. n est pair. Le jeu se déroule entre deux joueurs qui alternent leurs tours. A chaque tour, un joueur choisi soit la première ou la dernière pièce, la retire du jeu et l'empoche; ses gains sont incrémentés de la valeur de cette pièce.
+
+Sachant que l'autre joueur fait aussi le choix optimal à chaque tour, déterminer le somme maximale que l'on peut gagner si le premier tour est à nous.
+
+
+*** Résolution
+
+Pour commencer, illustrons le problème avec cet exemple :
+9, 12, 1, 6.
+
+Il y a deux scénarios possibles :
+
+1. Vous choisissez 9
+   L'autre choisi 12
+   vous -> 6
+   L'autre -> 1
+
+   Vous gagnez 15
+
+2. Vous choisissez 6
+   L'autre choisi 9
+   vous -> 12
+   L'autre -> 1
+
+   Vous gagnez 18
+
+Ainsi, on constate que le choix de la pièce à la valeur max à chaque tour ne donne pas forcément le montant total maximal.
+
+En considérant que i parcours les pièces de la gauche vers la droite et que j les parcours de la droite vers la gauche,
+
+- Si vous choisissez la ième pièce à la valeur Vi, l'adversaire choisira soit la i+1 ème pièce, soit la j ième pièce. Vous ne pourrez donc qu'avoir Vi + (sum - vi) - F(i+1, j, sum-vi), sum étant la somme des valeurs des pièces de i à j et F représentant le maximum que vous pouvez gagner de ce qui reste.
+- Si vous choisissez la jième pièce à la valeur Vj, l'adversaire choisira soit la ieme pièce, soit la j-1 ième pièce. L'adversaire fait en sorte que votre prochain choix vous fasse gagner la somme la plus minimale possible, donc vous ne pouvez gagner que Vj + (sum - vj) - F(i, j-1, sum - vj).
+
+De ce qui précède on peut établir une solution récursive qui est la suivante :
+
+Soit pieces, le tableau contenant les pièces.
+
+#+begin_example
+if j == i+1 do
+    F(i, j) := max(pieces[i], pieces[j])
+else do
+    F(i, j) := max(sum - F(i+1, j, sum-pieces[i]), sum - F(i, j-1, sum-pieces[j]))
+#+end_example
+
+
+La solution récursive sans mémoization est la suivante :
+
+#+begin_src C++
+int maxRec(int pieces[], int i, int j, int sum)
+{
+    if (j == i + 1)
+        return max(pieces[i], pieces[j]);
+
+    return max((sum - maxRec(pieces, i + 1, j, sum - pieces[i])),
+               (sum - maxRec(pieces, i, j - 1, sum - pieces[j])));
+}
+
+int findOptimalStrategy(int* pieces, int n)
+{
+    int sum = 0;
+    sum = accumulate(pieces, pieces + n, sum);
+    return maxRec(pieces, 0, n - 1, sum);
+}
+#+end_src
+
+
+En introduisant la mémoization, la solution devient :
+
+#+begin_src C++
+const int N = 100;
+
+int memo[100][100];
+
+int maxRec(int pieces[], int i, int j, int sum)
+{
+    if (j == i + 1)
+        return max(pieces[i], pieces[j]);
+
+    if (memo[i][j] != -1)
+        return memo[i][j];
+
+
+    memo[i][j]
+        = max((sum - maxRec(pieces, i + 1, j, sum - pieces[i])),
+              (sum - maxRec(pieces, i, j - 1, sum - pieces[j])));
+
+    return memo[i][j];
+}
+
+
+int findOptimalStrategy(int* pieces, int n)
+{
+    int sum = 0;
+    sum = accumulate(pieces, pieces + n, sum);
+
+    memset(memo, -1, sizeof(memo));
+
+    return maxRec(pieces, 0, n - 1, sum);
+}
+#+end_src
+
+
+*Programme complet* (voir annexe ou fichier source)
+
+
+* Branch & Bound
+
+Le Branch & Bound est une méthode de résolution d'un problème qui permet d'éliminer des possibilités parmis une multitude en vue de s'approcher du résultat final. Cet algorithme fonctionne comme une recherche dichotomique. Plus l'algorithme tourne longtemps, plus il fournira un résultat avoisinant la valeur réelle.
+
+La valeur actuelle est mise à jour à chaque fois qu'on découvre une meilleure valeur que celle-ci durant le fonctionnement de l'algorithme.
+
+*Branch* : consiste à découper le problème en sous-problèmes plus petits.
+
+*Bound* : pas besoin de faire des tests sur des valeurs dont on sait qu'elles ne peuvent améliorer le résulat.
+
+
+** Problème des 8 puzzle
+
+Etant donné une grille de 3\times3 avec 7 cases numérotées de 1 à 7 et une case vide, l'objectif est déplacer les nombres pour pouvoir former la configuration finale en utilisant l'espace vide pour pouvoir faire les déplacements.
+
+** Solutions
+
+Une première solution serait de créer un arbre contenant toutes les possibilités de déplacements afin de pouvoir retrouver la configuration finale en utilisant un parcours de graphe.
+
+# TODO place the image of the graph example
+
+Cependant cette solution a une complexité exponentielle. Donc nous avons plus intérêt à choisir une solution plus efficace qui nous permettra de faire moins de recherche.
+
+Nous allons utiliser le branch and bound pour résoudre cet problème.
+
+Pour débuter, nous allons attribuer des couts à noeuds de l'arbre des possibilités.
+
+Soit c(x) le cout du noeud x. r(x) est le coup permettant d'atteindre le noeud x depuis la racine. s(x) est le coup qui permet d'atteindre la solution.
+
+On a la relation c(x) = r(x) + s(x)
+
+Etablissons les coups suivant :
+
+- 1 : pour un déplacement dans n'importe quelle direction d'un des numéros vers l'emplacement vide.
+
+En considérant cela :
+- r(x) devient la longueur du chemin depuis la racine jusqu'au noeud x.
+- s(x) devient le nombre minimum de déplacements restant pour passer de l'état x (qui n'est pas la configuration recherchée) à l'état recherché.
+
+Exemple de fonctionnement :
+
+
+*Programme* (voir annexe)
