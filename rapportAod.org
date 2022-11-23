@@ -147,6 +147,8 @@ On peut faire passer cet algorithme à une méthode *cache oblivious* en faisant
 La découpe récursive permet d'obtenir le code suivant :
 # TODO Compléter ou supprimer la ligne d'en haut
 
+La découpe récursive est une technique qui peut être exécutée en parallèle, par plusieurs threads.
+
 * Programmation dynamique, blocking et memoization
 
 *Qu'est-ce la programmation dynamique ?*
@@ -307,3 +309,5 @@ Exemple de fonctionnement :
 
 
 *Programme* (voir annexe)
+
+S'il n'y a pas de solution cet algorithme va tourner à l'infini. Pour résoudre cet problème et afficher le chemin vers la solution la plus proche, il faudrait afficher les chemins en même temps que l'algorithme se déroule, ou plutôt faire la gestion du signal d'arrêt Ctrl+C pour afficher le chemin.
