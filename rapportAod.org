@@ -68,7 +68,7 @@ Le passage vers le deuxième algorithme relate l'éfficacité de l'utilisation d
 La localité temporelle est traduite par le fait qu'au lieu de faire le calcul de la somme des éléments puis ensuite de faire le calcul de la somme des carrés on fasse ces deux calculs de manière rapprochée dans simultanée ou rapprochée dans le temps. Après avoir accédé à l'élément à l'index i, on utilise pour calculer la somme mais on calcul en même temps son carré pour pouvoir calculer la somme des carrés.
 
 
-Ainsi la localité est un concept très important à prendre en compte lorsque l'on veut optimiser le code, les parties suivantes traiterons de stratégies plus avancées mais qui prennent en compte la localité.
+traiterons de stratégies plus avancées mais qui prennent en compte la localité.
 
 
 * Technique de blocking
@@ -145,9 +145,39 @@ Cette méthode est une méthode *cache aware*.
 On peut faire passer cet algorithme à une méthode *cache oblivious* en faisant une découpe récursive des blocs pour que ceux-ci tiennent en cache, mais cela ne serait nécessaire que si nous avons des matrices de très grandes tailles pour que le coup de la découpe récursive soit négligeable devant le coup des défauts de cache que nous obtiendrons sans faire cette opérations.
 
 La découpe récursive permet d'obtenir le code suivant :
-# TODO Compléter ou supprimer la ligne d'en haut
+
+#+BEGIN_EXAMPLE
+define recursiveMult(i_beg, i_end, j_beg, j_end) as
+    S = 16;
+    lg_bloc := i_beg - i_end;
+    col_bloc := j_beg - j_end;
+
+
+    if lg_bloc <= S && col_bloc <= S do
+        i := i_deb
+        j := j_deb
+
+        for kk := i_deb to i_end do
+            for jj := j_deb to j_end do
+                z = X[i, k]
+                for k := i_deb to i_end do
+                    P[i, j] += z * Y[k, j]
+
+    else if lg_bloc > col_bloc do
+        mid := lg_bloc / 2;
+        recursiveMult(i_beg, mid, j_beg, mid)
+        recursiveMult(mid, i_end, mid, j_end)
+
+    else if lg_bloc < col_bloc do
+        mid := col_bloc / 2;
+        recursiveMult(i_beg, mid, j_beg, mid)
+        recursiveMult(mid, i_end, mid, j_end)
+
+#+END_EXAMPLE
+
 
 La découpe récursive est une technique qui peut être exécutée en parallèle, par plusieurs threads.
+
 
 * Programmation dynamique, blocking et memoization
 
@@ -285,7 +315,9 @@ Etant donné une grille de 3\times3 avec 7 cases numérotées de 1 à 7 et une c
 
 Une première solution serait de créer un arbre contenant toutes les possibilités de déplacements afin de pouvoir retrouver la configuration finale en utilisant un parcours de graphe.
 
-# TODO place the image of the graph example
+#+CAPTION: Solution par brute force, parcours en profondeur
+[[./1.png]]
+
 
 Cependant cette solution a une complexité exponentielle. Donc nous avons plus intérêt à choisir une solution plus efficace qui nous permettra de faire moins de recherche.
 
@@ -307,7 +339,329 @@ En considérant cela :
 
 Exemple de fonctionnement :
 
+#+CAPTION: Solution par Branch and Bound
+[[./2.png]]
+
 
 *Programme* (voir annexe)
 
 S'il n'y a pas de solution cet algorithme va tourner à l'infini. Pour résoudre cet problème et afficher le chemin vers la solution la plus proche, il faudrait afficher les chemins en même temps que l'algorithme se déroule, ou plutôt faire la gestion du signal d'arrêt Ctrl+C pour afficher le chemin.
+
+
+
+* Sources
+
+https://chamilo.grenoble-inp.fr/courses/ENSIMAG4MMAOD6/document/resources/index-4MMAOD6.html
+
+https://www.geeksforgeeks.org
+
+https://suif.stanford.edu/papers/lam-asplos91.pdf
+
+https://en.wikipedia.org/wiki/Cache-oblivious_algorithm#:~:text=For%20example%2C%20an%20optimal%20cache,in%20a%20depth%2Dfirst%20fashion
+
+
+* Annexe
+
+
+** illustration principe de localite
+
+#+begin_src C++
+#include <math.h>
+#define TAILLE 100
+
+int main(){
+
+    int tab[100] = {0};
+
+    int somme = 0;
+    int somme_carres=0;
+    for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+        somme += tab[i];
+    }
+
+    for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+        somme_carres += pow(tab[i], 2);
+    }
+}
+#+end_src
+
+#+begin_src C++
+#include <math.h>
+#define TAILLE 100
+
+int main(){
+
+    int tab[100] = {0};
+
+    int somme = 0;
+    int somme_carres=0;
+    for(int i=0; i<sizeof(tab)/sizeof(int); i++){
+        somme += tab[i];
+        somme_carres += pow(tab[i], 2);
+    }
+
+}
+
+#+end_src
+
+
+** Optimisation de choix de jeu, programmation dynamique/
+
+
+/strategieJeu.cpp/
+
+#+begin_src C++
+#include <bits/stdc++.h>
+using namespace std;
+
+int maxRec(int pieces[], int i, int j, int sum)
+{
+    if (j == i + 1)
+        return max(pieces[i], pieces[j]);
+
+    return max((sum - maxRec(pieces, i + 1, j, sum - pieces[i])),
+               (sum - maxRec(pieces, i, j - 1, sum - pieces[j])));
+}
+
+int findOptimalStrategy(int* pieces, int n)
+{
+    int sum = 0;
+    sum = accumulate(pieces, pieces + n, sum);
+    return maxRec(pieces, 0, n - 1, sum);
+}
+
+int main()
+{
+    int test1[] = { 12, 11, 5, 4 };
+    printf("%d\n", findOptimalStrategy(test1, 4));
+
+    int test2[] = { 1, 0, 3, 9 };
+    printf("%d\n", findOptimalStrategy(test2, 4));
+
+    int test3[] = { 40, 10, 1, 4, 3, 9 };
+    printf("%d\n", findOptimalStrategy(test3, 6));
+
+    return 0;
+}
+#+end_src
+
+
+/strategieJeuAvecMemoization.cpp/
+
+#+begin_src C++
+#include <bits/stdc++.h>
+using namespace std;
+
+const int N = 100;
+
+int memo[100][100];
+
+int maxRec(int pieces[], int i, int j, int sum)
+{
+    if (j == i + 1)
+        return max(pieces[i], pieces[j]);
+
+    if (memo[i][j] != -1)
+        return memo[i][j];
+
+
+    memo[i][j]
+        = max((sum - maxRec(pieces, i + 1, j, sum - pieces[i])),
+              (sum - maxRec(pieces, i, j - 1, sum - pieces[j])));
+
+    return memo[i][j];
+}
+
+
+int findOptimalStrategy(int* pieces, int n)
+{
+    int sum = 0;
+    sum = accumulate(pieces, pieces + n, sum);
+
+    memset(memo, -1, sizeof(memo));
+
+    return maxRec(pieces, 0, n - 1, sum);
+}
+
+int main()
+{
+    int test1[] = { 12, 11, 5, 4 };
+    printf("%d\n", findOptimalStrategy(test1, 4));
+
+    int test2[] = { 1, 0, 3, 9 };
+    printf("%d\n", findOptimalStrategy(test2, 4));
+
+    int test3[] = { 40, 10, 1, 4, 3, 9 };
+    printf("%d\n", findOptimalStrategy(test3, 6));
+
+    return 0;
+}
+
+#+end_src
+
+
+** Branch & Bound
+
+/8puzzle.cpp/
+
+#+begin_src C++
+#include <bits/stdc++.h>
+using namespace std;
+#define N 3
+
+// on considère que le puzzle peut être résolu
+
+class Noeud
+{
+    public:
+    // permet de faire le backtracking
+    Noeud* parent;
+
+    // etat actuel du puzzle
+    int puzzle[N][N];
+
+    // stores blank tile coordinates
+    int x, y;
+
+    // stores the number of misplaced tiles
+    int cout;
+
+    // stores the number of moves so far
+    int level;
+};
+
+// affichage de l'état du puzzle
+void printPuzzle(int puzzle[N][N])
+{
+    for (int i = 0; i < N; i++)
+    {
+        for (int j = 0; j < N; j++)
+            printf("%d ", puzzle[i][j]);
+        printf("\n");
+    }
+}
+
+// Création d'un noeud
+Noeud* newNoeud(int puzzle[N][N], int x, int y, int newX,
+              int newY, int level, Noeud* parent)
+{
+    Noeud* noeud = new Noeud;
+
+    noeud->parent = parent;
+
+    memcpy(noeud->puzzle, puzzle, sizeof noeud->puzzle);
+
+    swap(noeud->puzzle[x][y], noeud->puzzle[newX][newY]);
+
+    noeud->cout = INT_MAX;
+
+    noeud->level = level;
+
+    noeud->x = newX;
+    noeud->y = newY;
+
+    return noeud;
+}
+
+// bottom, left, top, right
+int row[] = { 1, 0, -1, 0 };
+int col[] = { 0, -1, 0, 1 };
+
+int getCout(int initial[N][N], int final[N][N])
+{
+    int count = 0;
+    for (int i = 0; i < N; i++)
+      for (int j = 0; j < N; j++)
+        if (initial[i][j] && initial[i][j] != final[i][j])
+           count++;
+    return count;
+}
+
+int isMatrixIndexesOutOfBounds(int x, int y)
+{
+    return (x >= 0 && x < N && y >= 0 && y < N);
+}
+
+void afficherSolution(Noeud* root)
+{
+    if (root == NULL)
+        return;
+    afficherSolution(root->parent);
+    printPuzzle(root->puzzle);
+
+    printf("\n");
+}
+
+struct comp
+{
+    bool operator()(const Noeud* lhs, const Noeud* rhs) const
+    {
+        return (lhs->cout + lhs->level) > (rhs->cout + rhs->level);
+    }
+};
+
+// x et y sont les coordonnées de la case vide
+void solve(int initial[N][N], int x, int y,
+           int final[N][N])
+{
+    priority_queue<Noeud*, std::vector<Noeud*>, comp> pq;
+
+    Noeud* root = newNoeud(initial, x, y, x, y, 0, NULL);
+    root->cout = getCout(initial, final);
+
+    // Add root to list of live nodes;
+    pq.push(root);
+
+    while (!pq.empty())
+    {
+        Noeud* min = pq.top();
+
+        pq.pop();
+
+        if (min->cout == 0)
+        {
+            afficherSolution(min);
+            return;
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (isMatrixIndexesOutOfBounds(min->x + row[i], min->y + col[i]))
+            {
+                Noeud* child = newNoeud(min->puzzle, min->x,
+                              min->y, min->x + row[i],
+                              min->y + col[i],
+                              min->level + 1, min);
+                child->cout = getCout(child->puzzle, final);
+
+                pq.push(child);
+            }
+        }
+    }
+}
+
+int main()
+{
+    int initial[N][N] =
+    {
+        {2, 1, 4},
+        {5, 6, 8},
+        {7, 0, 3}
+    };
+
+    int final[N][N] =
+    {
+        {2, 1, 4},
+        {5, 8, 0},
+        {7, 6, 3}
+    };
+
+    // L'espace vide se trouve à la position (0, 0)
+    int x = 2, y = 1;
+
+    solve(initial, x, y, final);
+
+    return 0;
+}
+
+#+end_src
